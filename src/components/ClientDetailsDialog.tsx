@@ -150,7 +150,7 @@ const ClientDetailsDialog = ({ open, onClose, client }: ClientDetailsDialogProps
                 Send Message
               </Button>
               <Chip
-                label={client.case_status || 'Active'}
+                label={client.case_status || ''}
                 size="small"
                 sx={{
                   bgcolor: getStatusColor(client.case_status || '').bg,

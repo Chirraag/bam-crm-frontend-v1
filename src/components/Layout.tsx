@@ -24,7 +24,7 @@ import {
   Message as MessageIcon,
   RecordVoiceOver as VoiceIcon,
   People as PeopleIcon,
-  Email as EmailIcon,  // ← ADD THIS
+  Sms as SmsIcon,  // ← CHANGED: Use SmsIcon for messages
   Logout as LogoutIcon,
   Scale as ScaleIcon
 } from '@mui/icons-material';
@@ -63,7 +63,7 @@ const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'Calendar', icon: <CalendarIcon />, path: '/calendar' },
   { text: 'Clients', icon: <PeopleIcon />, path: '/clients' },
-
+  { text: 'Messages', icon: <SmsIcon />, path: '/messages' }, // ← ADDED: Messages menu item
 ];
 
   const drawer = (

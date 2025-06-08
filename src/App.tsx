@@ -7,6 +7,7 @@ import Login from './pages/auth/Login';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import Calendar from './pages/Calendar';
+import Messages from './pages/Messages'; // ← ADDED: Import Messages component
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -48,6 +49,7 @@ function App() {
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/clients" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+        <Route path="/messages" element={<ProtectedRoute><Messages /></ProtectedRoute>} /> {/* ← ADDED: Messages route */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>

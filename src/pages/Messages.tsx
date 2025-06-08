@@ -467,42 +467,43 @@ const Messages = () => {
                       send messages.
                     </Alert>
                   ) : (
-                    <TextField
-                      fullWidth
-                      placeholder="Type your message... (Shift+Enter for new line)"
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      disabled={sendingMessage}
-                      multiline
-                      maxRows={4}
-                      minRows={1}
-                      size="small"
-                      sx={{
-                        "& .MuiInputBase-input": {
-                          lineHeight: 1.4,
-                          fontFamily: "inherit",
-                        },
-                      }}
-                      InputProps={{
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              onClick={handleSendMessage}
-                              disabled={!newMessage.trim() || sendingMessage}
-                              color="primary"
-                              sx={{ alignSelf: "flex-end", mb: 0.5 }}
-                            >
-                              {sendingMessage ? (
-                                <CircularProgress size={20} />
-                              ) : (
-                                <SendIcon />
-                              )}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
+                    <Box
+                      sx={{ display: "flex", alignItems: "flex-end", gap: 1 }}
+                    >
+                      <TextField
+                        fullWidth
+                        placeholder="Type your message... (Shift+Enter for new line)"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        disabled={sendingMessage}
+                        multiline
+                        maxRows={4}
+                        minRows={1}
+                        size="small"
+                        sx={{
+                          "& .MuiInputBase-input": {
+                            lineHeight: 1.4,
+                            fontFamily: "inherit",
+                          },
+                        }}
+                      />
+                      <IconButton
+                        onClick={handleSendMessage}
+                        disabled={!newMessage.trim() || sendingMessage}
+                        color="primary"
+                        sx={{
+                          mb: 0.25, // Small bottom margin to align with text baseline
+                          flexShrink: 0, // Prevent button from shrinking
+                        }}
+                      >
+                        {sendingMessage ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <SendIcon />
+                        )}
+                      </IconButton>
+                    </Box>
                   )}
                 </Box>
               </>

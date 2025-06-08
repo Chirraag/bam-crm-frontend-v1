@@ -127,3 +127,25 @@ export const api = {
     }
   },
 };
+
+// ✅ ADDED: Messaging service functions
+export const messageService = {
+  // Get message history for a client
+  getClientMessages: async (clientId: string) => {
+    return api.get(`/api/messages/client/${clientId}`);
+  },
+
+  // Send SMS to a client
+  sendMessage: async (clientId: string, content: string, phoneNumber?: string) => {
+    return api.post('/api/messages/send', {
+      client_id: clientId,
+      content,
+      phone_number: phoneNumber
+    });
+  },
+
+  // Get all phone numbers for a client
+  getClientPhoneNumbers: async (clientId: string) => {
+    return api.get(`/api/messages/client/${clientId}/phone-numbers`);
+  }
+};

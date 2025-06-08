@@ -451,7 +451,7 @@ const ClientDialog = ({ open, onClose, onSave, client, mode }: ClientDialogProps
                 select
                 fullWidth
                 label="Case Status"
-                value={formData.case_status || 'Active'}
+                value={formData.case_status || ''}
                 onChange={handleChange('case_status')}
               >
                 <MenuItem value="Active">Active</MenuItem>

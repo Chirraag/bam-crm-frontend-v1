@@ -50,7 +50,9 @@ const ClientDialog = ({ open, onClose, onSave, client, mode }: ClientDialogProps
       // Generate a temporary ID for new clients to use for document uploads
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setTempClientId(tempId);
-      setFormData({});
+      setFormData({
+        case_status: 'Active' // Set default case status to Active
+      });
     }
   }, [client, mode]);
 

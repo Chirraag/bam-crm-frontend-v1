@@ -28,8 +28,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const currentUser = authService.getCurrentUser();
         if (currentUser) {
-          // Restore Supabase session for authenticated operations
-          await authService.restoreSession();
           setUser(currentUser);
         }
       } catch (error) {

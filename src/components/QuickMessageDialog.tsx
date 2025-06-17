@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -10,11 +10,12 @@ import {
   Box,
   CircularProgress,
   Alert,
-  Chip
-} from '@mui/material';
-import { Send as SendIcon, Sms as SmsIcon } from '@mui/icons-material';
-import { Client } from '../types/client';
-import { messageService } from '../utils/api';
+  Chip,
+} from "@mui/material";
+import { Send as SendIcon, Sms as SmsIcon } from "@mui/icons-material";
+import { Client } from "../types/client";
+import { messageService } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
 
 interface QuickMessageDialogProps {
   open: boolean;
@@ -22,8 +23,13 @@ interface QuickMessageDialogProps {
   client: Client | null;
 }
 
-const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) => {
-  const [message, setMessage] = useState('');
+const QuickMessageDialog = ({
+  open,
+  onClose,
+  client,
+}: QuickMessageDialogProps) => {
+  const { user } = useAuth();
+  const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,27 +37,35 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
   const handleSend = async () => {
     if (!message.trim() || !client) return;
 
+    // Check if operator has a phone number
+    if (!user?.phone_number) {
+      setError(
+        "Your account does not have a phone number assigned. Please contact the administrator.",
+      );
+      return;
+    }
+
     try {
       setSending(true);
       setError(null);
-      
+
       await messageService.sendMessage(
         client.id!.toString(),
-        message.trim()
+        message.trim(),
+        user.phone_number, // Use operator's phone number
       );
-      
+
       setSuccess(true);
-      setMessage('');
-      
+      setMessage("");
+
       // Auto close after success
       setTimeout(() => {
         setSuccess(false);
         onClose();
       }, 2000);
-      
     } catch (error) {
-      console.error('Error sending message:', error);
-      setError('Failed to send message. Please try again.');
+      console.error("Error sending message:", error);
+      setError("Failed to send message. Please try again.");
     } finally {
       setSending(false);
     }
@@ -59,7 +73,7 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
 
   const handleClose = () => {
     if (!sending) {
-      setMessage('');
+      setMessage("");
       setError(null);
       setSuccess(false);
       onClose();
@@ -67,7 +81,7 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && e.ctrlKey) {
+    if (e.key === "Enter" && e.ctrlKey) {
       handleSend();
     }
   };
@@ -75,17 +89,17 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
   if (!client) return null;
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={handleClose} 
-      maxWidth="sm" 
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
       fullWidth
       PaperProps={{
-        sx: { borderRadius: 2 }
+        sx: { borderRadius: 2 },
       }}
     >
       <DialogTitle sx={{ pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <SmsIcon color="primary" />
           <Typography variant="h6">Send Message</Typography>
         </Box>
@@ -93,22 +107,22 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
           To: {client.first_name} {client.last_name}
         </Typography>
         <Box sx={{ mt: 1 }}>
-          <Chip 
-            label={client.primary_phone || 'No phone number'} 
-            size="small" 
+          <Chip
+            label={client.primary_phone || "No phone number"}
+            size="small"
             color={client.primary_phone ? "primary" : "error"}
             variant="outlined"
           />
         </Box>
       </DialogTitle>
-      
+
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
-        
+
         {success && (
           <Alert severity="success" sx={{ mb: 2 }}>
             Message sent successfully!
@@ -117,7 +131,13 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
 
         {!client.primary_phone ? (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            This client doesn't have a phone number. Please add one before sending messages.
+            This client doesn't have a phone number. Please add one before
+            sending messages.
+          </Alert>
+        ) : !user?.phone_number ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            You cannot send messages because your account doesn't have a phone
+            number assigned. Please contact the administrator.
           </Alert>
         ) : (
           <TextField
@@ -132,26 +152,29 @@ const QuickMessageDialog = ({ open, onClose, client }: QuickMessageDialogProps) 
             sx={{ mb: 1 }}
           />
         )}
-        
+
         <Typography variant="caption" color="text.secondary">
           Tip: Press Ctrl+Enter to send quickly
         </Typography>
       </DialogContent>
-      
+
       <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button 
-          onClick={handleClose} 
-          disabled={sending}
-        >
+        <Button onClick={handleClose} disabled={sending}>
           Cancel
         </Button>
-        <Button 
+        <Button
           onClick={handleSend}
           variant="contained"
           startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
-          disabled={!message.trim() || sending || !client.primary_phone || success}
+          disabled={
+            !message.trim() ||
+            sending ||
+            !client.primary_phone ||
+            !user?.phone_number ||
+            success
+          }
         >
-          {sending ? 'Sending...' : 'Send Message'}
+          {sending ? "Sending..." : "Send Message"}
         </Button>
       </DialogActions>
     </Dialog>

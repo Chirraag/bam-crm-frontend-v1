@@ -3,6 +3,8 @@ import { supabase } from '../utils/supabaseClient';
 interface User {
   id: string;
   email: string;
+  name?: string;
+  phone_number?: string;
 }
 
 interface LoginCredentials {
@@ -29,7 +31,7 @@ class AuthService {
       // Verify credentials against crm_users table
       const { data: userData, error: userError } = await supabase
         .from('crm_users')
-        .select('id, email, password_hash')
+        .select('id, email, password_hash, name, phone_number')
         .eq('email', email.toLowerCase())
         .single();
 
@@ -53,7 +55,9 @@ class AuthService {
 
       const user: User = {
         id: userData.id,
-        email: userData.email
+        email: userData.email,
+        name: userData.name,
+        phone_number: userData.phone_number
       };
 
       return { user, session: customSession };

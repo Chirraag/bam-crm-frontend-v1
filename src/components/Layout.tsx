@@ -1,22 +1,22 @@
-import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { 
-  Box, 
-  Drawer, 
-  List, 
-  Typography, 
-  Divider, 
-  IconButton, 
-  ListItem, 
-  ListItemButton, 
-  ListItemIcon, 
+import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  Box,
+  Drawer,
+  List,
+  Typography,
+  Divider,
+  IconButton,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
   ListItemText,
   Avatar,
   Menu,
   MenuItem,
   useMediaQuery,
-  useTheme
-} from '@mui/material';
+  useTheme,
+} from "@mui/material";
 import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
@@ -24,11 +24,11 @@ import {
   Message as MessageIcon,
   RecordVoiceOver as VoiceIcon,
   People as PeopleIcon,
-  Sms as SmsIcon,  // ← CHANGED: Use SmsIcon for messages
+  Sms as SmsIcon, // ← CHANGED: Use SmsIcon for messages
   Logout as LogoutIcon,
-  Scale as ScaleIcon
-} from '@mui/icons-material';
-import { useAuth } from '../context/AuthContext';
+  Scale as ScaleIcon,
+} from "@mui/icons-material";
+import { useAuth } from "../context/AuthContext";
 
 const drawerWidth = 280;
 
@@ -41,7 +41,7 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleDrawerToggle = () => {
@@ -59,23 +59,25 @@ export default function Layout({ children }: LayoutProps) {
     }
   };
 
-const menuItems = [
-  { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-  { text: 'Calendar', icon: <CalendarIcon />, path: '/calendar' },
-  { text: 'Clients', icon: <PeopleIcon />, path: '/clients' },
-  { text: 'Messages', icon: <SmsIcon />, path: '/messages' }, // ← ADDED: Messages menu item
-];
+  const menuItems = [
+    { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+    { text: "Calendar", icon: <CalendarIcon />, path: "/calendar" },
+    { text: "Clients", icon: <PeopleIcon />, path: "/clients" },
+    { text: "Messages", icon: <SmsIcon />, path: "/messages" }, // ← ADDED: Messages menu item
+  ];
 
   const drawer = (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ 
-        p: 2, 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-        color: 'white'
-      }}>
+    <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          p: 2,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+          color: "white",
+        }}
+      >
         <ScaleIcon sx={{ fontSize: 28, mr: 1 }} />
         <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
           Legal CRM
@@ -83,7 +85,15 @@ const menuItems = [
       </Box>
       <Divider />
       <Box sx={{ mt: 2, px: 2 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 500, color: theme.palette.text.secondary, mb: 1, ml: 2 }}>
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 500,
+            color: theme.palette.text.secondary,
+            mb: 1,
+            ml: 2,
+          }}
+        >
           MAIN MENU
         </Typography>
       </Box>
@@ -94,28 +104,36 @@ const menuItems = [
               onClick={() => handleNavigation(item.path)}
               selected={location.pathname === item.path}
               sx={{
-                borderRadius: '8px',
+                borderRadius: "8px",
                 mb: 0.5,
-                '&.Mui-selected': {
-                  backgroundColor: theme.palette.primary.light + '20',
-                  '&:hover': {
-                    backgroundColor: theme.palette.primary.light + '30',
+                "&.Mui-selected": {
+                  backgroundColor: theme.palette.primary.light + "20",
+                  "&:hover": {
+                    backgroundColor: theme.palette.primary.light + "30",
                   },
                 },
               }}
             >
-              <ListItemIcon sx={{ 
-                color: location.pathname === item.path ? theme.palette.primary.main : 'inherit',
-                minWidth: '40px'
-              }}>
+              <ListItemIcon
+                sx={{
+                  color:
+                    location.pathname === item.path
+                      ? theme.palette.primary.main
+                      : "inherit",
+                  minWidth: "40px",
+                }}
+              >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText 
-                primary={item.text} 
-                primaryTypographyProps={{ 
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
                   fontWeight: location.pathname === item.path ? 500 : 400,
-                  color: location.pathname === item.path ? theme.palette.primary.main : 'inherit'
-                }} 
+                  color:
+                    location.pathname === item.path
+                      ? theme.palette.primary.main
+                      : "inherit",
+                }}
               />
             </ListItemButton>
           </ListItem>
@@ -123,37 +141,50 @@ const menuItems = [
       </List>
       <Divider />
       <Box sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar sx={{ width: 40, height: 40, mr: 2, bgcolor: theme.palette.primary.main }}>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <Avatar
+            sx={{
+              width: 40,
+              height: 40,
+              mr: 2,
+              bgcolor: theme.palette.primary.main,
+            }}
+          >
             {user?.email?.charAt(0).toUpperCase()}
           </Avatar>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
-              {user?.email?.split('@')[0]}
+              {user?.name || user?.email?.split("@")[0]}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ fontSize: "0.75rem" }}
+            >
               {user?.email}
             </Typography>
           </Box>
         </Box>
-        <ListItemButton 
+        <ListItemButton
           onClick={handleSignOut}
-          sx={{ 
-            borderRadius: '8px',
-            '&:hover': {
-              backgroundColor: theme.palette.error.light + '20',
+          sx={{
+            borderRadius: "8px",
+            "&:hover": {
+              backgroundColor: theme.palette.error.light + "20",
             },
           }}
         >
-          <ListItemIcon sx={{ color: theme.palette.error.main, minWidth: '40px' }}>
+          <ListItemIcon
+            sx={{ color: theme.palette.error.main, minWidth: "40px" }}
+          >
             <LogoutIcon />
           </ListItemIcon>
-          <ListItemText 
-            primary="Sign out" 
-            primaryTypographyProps={{ 
+          <ListItemText
+            primary="Sign out"
+            primaryTypographyProps={{
               color: theme.palette.error.main,
-              fontWeight: 500 
-            }} 
+              fontWeight: 500,
+            }}
           />
         </ListItemButton>
       </Box>
@@ -161,23 +192,23 @@ const menuItems = [
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
+    <Box sx={{ display: "flex", height: "100vh" }}>
       {isMobile && (
         <IconButton
           color="inherit"
           aria-label="open drawer"
           edge="start"
           onClick={handleDrawerToggle}
-          sx={{ 
-            position: 'fixed',
+          sx={{
+            position: "fixed",
             left: 16,
             top: 16,
             zIndex: 1200,
-            bgcolor: 'background.paper',
+            bgcolor: "background.paper",
             boxShadow: 1,
-            '&:hover': {
-              bgcolor: 'background.paper',
-            }
+            "&:hover": {
+              bgcolor: "background.paper",
+            },
           }}
         >
           <MenuIcon />
@@ -195,11 +226,11 @@ const menuItems = [
             keepMounted: true,
           }}
           sx={{
-            display: { xs: 'block', md: 'none' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
+            display: { xs: "block", md: "none" },
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
               width: drawerWidth,
-              backgroundImage: 'none',
+              backgroundImage: "none",
             },
           }}
         >
@@ -208,13 +239,13 @@ const menuItems = [
         <Drawer
           variant="permanent"
           sx={{
-            display: { xs: 'none', md: 'block' },
-            '& .MuiDrawer-paper': { 
-              boxSizing: 'border-box', 
+            display: { xs: "none", md: "block" },
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
               width: drawerWidth,
-              border: 'none',
+              border: "none",
               borderRight: `1px solid ${theme.palette.divider}`,
-              backgroundImage: 'none',
+              backgroundImage: "none",
             },
           }}
           open
@@ -227,10 +258,10 @@ const menuItems = [
         sx={{
           flexGrow: 1,
           width: { md: `calc(100% - ${drawerWidth}px)` },
-          height: '100vh',
-          overflow: 'auto',
-          bgcolor: 'background.default',
-          p: { xs: 2, sm: 3 }
+          height: "100vh",
+          overflow: "auto",
+          bgcolor: "background.default",
+          p: { xs: 2, sm: 3 },
         }}
       >
         {children}

@@ -1,10 +1,18 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { authService } from '../services/authService';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { useNavigate } from "react-router-dom";
+import { authService } from "../services/authService";
 
 interface User {
   id: string;
   email: string;
+  name?: string;
+  phone_number?: string;
 }
 
 interface AuthContextType {
@@ -31,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(currentUser);
         }
       } catch (error) {
-        console.error('Error checking session:', error);
+        console.error("Error checking session:", error);
         authService.clearSession();
       } finally {
         setLoading(false);
@@ -44,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      
+
       const result = await authService.login({ email, password });
 
       if (result.user) {
@@ -52,18 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authService.storeSession(result.user, result.session);
         return { error: null };
       } else {
-        return { 
-          error: { 
-            message: result.error || 'Invalid email or password' 
-          } 
+        return {
+          error: {
+            message: result.error || "Invalid email or password",
+          },
         };
       }
     } catch (error: any) {
-      console.error('Sign in error:', error);
-      return { 
-        error: { 
-          message: error.message || 'Login failed. Please try again.' 
-        } 
+      console.error("Sign in error:", error);
+      return {
+        error: {
+          message: error.message || "Login failed. Please try again.",
+        },
       };
     } finally {
       setLoading(false);
@@ -73,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     setUser(null);
     authService.clearSession();
-    navigate('/login');
+    navigate("/login");
   };
 
   const value = {
@@ -89,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

@@ -35,6 +35,94 @@ import Layout from "../components/Layout";
 import { Client } from "../types/client";
 import { api, messageService } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../utils/supabaseClient";
+import { RealtimeChannel } from "@supabase/supabase-js";
+import { useNotifications } from "../context/NotificationContext";
+import { useLocation } from "react-router-dom";
+
+// Inside Messages component:
+const location = useLocation();
+const { addNotification } = useNotifications();
+const [realtimeChannel, setRealtimeChannel] = useState<RealtimeChannel | null>(
+  null,
+);
+
+// Add this useEffect for handling navigation from notification
+useEffect(() => {
+  if (location.state?.selectedClientId) {
+    const client = clients.find(
+      (c) => c.id === location.state.selectedClientId,
+    );
+    if (client) {
+      setSelectedClient(client);
+    }
+  }
+}, [location.state, clients]);
+
+// Add this useEffect for real-time subscription
+useEffect(() => {
+  if (!user?.phone_number) return;
+
+  // Subscribe to new messages
+  const channel = supabase
+    .channel("messages-changes")
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `or(from_number.eq.${user.phone_number},to_number.eq.${user.phone_number})`,
+      },
+      async (payload) => {
+        const newMessage = payload.new as Message;
+
+        // If it's an inbound message, show notification
+        if (
+          newMessage.direction === "inbound" &&
+          newMessage.to_number === user.phone_number
+        ) {
+          // Find client info
+          const client = clients.find((c) => c.id === newMessage.client_id);
+
+          if (client) {
+            addNotification({
+              id: newMessage.id,
+              clientId: newMessage.client_id,
+              clientName: `${client.first_name} ${client.last_name}`,
+              message: newMessage.content,
+              timestamp: new Date(newMessage.created_at),
+            });
+          }
+        }
+
+        // Update messages if viewing this client
+        if (selectedClient?.id === newMessage.client_id) {
+          setClientMessages((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              messages: [...prev.messages, newMessage].sort(
+                (a, b) =>
+                  new Date(a.created_at).getTime() -
+                  new Date(b.created_at).getTime(),
+              ),
+            };
+          });
+        }
+      },
+    )
+    .subscribe();
+
+  setRealtimeChannel(channel);
+
+  // Cleanup subscription
+  return () => {
+    if (channel) {
+      supabase.removeChannel(channel);
+    }
+  };
+}, [user?.phone_number, selectedClient, clients, addNotification]);
 
 interface Message {
   id: string;
@@ -212,8 +300,11 @@ const Messages = () => {
           Send and receive SMS messages with your clients
         </Typography>
         {user?.phone_number && (
-          <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
-          </Typography>
+          <Typography
+            variant="body2"
+            color="primary"
+            sx={{ mt: 1 }}
+          ></Typography>
         )}
       </Box>
 

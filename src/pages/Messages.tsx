@@ -40,90 +40,6 @@ import { RealtimeChannel } from "@supabase/supabase-js";
 import { useNotifications } from "../context/NotificationContext";
 import { useLocation } from "react-router-dom";
 
-// Inside Messages component:
-const location = useLocation();
-const { addNotification } = useNotifications();
-const [realtimeChannel, setRealtimeChannel] = useState<RealtimeChannel | null>(
-  null,
-);
-
-// Add this useEffect for handling navigation from notification
-useEffect(() => {
-  if (location.state?.selectedClientId) {
-    const client = clients.find(
-      (c) => c.id === location.state.selectedClientId,
-    );
-    if (client) {
-      setSelectedClient(client);
-    }
-  }
-}, [location.state, clients]);
-
-// Add this useEffect for real-time subscription
-useEffect(() => {
-  if (!user?.phone_number) return;
-
-  // Subscribe to new messages
-  const channel = supabase
-    .channel("messages-changes")
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-        filter: `or(from_number.eq.${user.phone_number},to_number.eq.${user.phone_number})`,
-      },
-      async (payload) => {
-        const newMessage = payload.new as Message;
-
-        // If it's an inbound message, show notification
-        if (
-          newMessage.direction === "inbound" &&
-          newMessage.to_number === user.phone_number
-        ) {
-          // Find client info
-          const client = clients.find((c) => c.id === newMessage.client_id);
-
-          if (client) {
-            addNotification({
-              id: newMessage.id,
-              clientId: newMessage.client_id,
-              clientName: `${client.first_name} ${client.last_name}`,
-              message: newMessage.content,
-              timestamp: new Date(newMessage.created_at),
-            });
-          }
-        }
-
-        // Update messages if viewing this client
-        if (selectedClient?.id === newMessage.client_id) {
-          setClientMessages((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              messages: [...prev.messages, newMessage].sort(
-                (a, b) =>
-                  new Date(a.created_at).getTime() -
-                  new Date(b.created_at).getTime(),
-              ),
-            };
-          });
-        }
-      },
-    )
-    .subscribe();
-
-  setRealtimeChannel(channel);
-
-  // Cleanup subscription
-  return () => {
-    if (channel) {
-      supabase.removeChannel(channel);
-    }
-  };
-}, [user?.phone_number, selectedClient, clients, addNotification]);
-
 interface Message {
   id: string;
   client_id: string;
@@ -145,7 +61,11 @@ interface ClientMessages {
 const Messages = () => {
   const theme = useTheme();
   const { user } = useAuth();
+  const location = useLocation(); // MOVED INSIDE component
+  const { addNotification } = useNotifications(); // MOVED INSIDE component
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // All state hooks
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientMessages, setClientMessages] = useState<ClientMessages | null>(
@@ -156,6 +76,8 @@ const Messages = () => {
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeChannel, setRealtimeChannel] =
+    useState<RealtimeChannel | null>(null); // MOVED INSIDE component
 
   useEffect(() => {
     fetchClients();
@@ -171,6 +93,83 @@ const Messages = () => {
   useEffect(() => {
     scrollToBottom();
   }, [clientMessages]);
+
+  // Handle navigation from notification - MOVED INSIDE component
+  useEffect(() => {
+    if (location.state?.selectedClientId) {
+      const client = clients.find(
+        (c) => c.id === location.state.selectedClientId,
+      );
+      if (client) {
+        setSelectedClient(client);
+      }
+    }
+  }, [location.state, clients]);
+
+  // Real-time subscription - MOVED INSIDE component
+  useEffect(() => {
+    if (!user?.phone_number) return;
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel("messages-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `or(from_number.eq.${user.phone_number},to_number.eq.${user.phone_number})`,
+        },
+        async (payload) => {
+          const newMessage = payload.new as Message;
+
+          // If it's an inbound message, show notification
+          if (
+            newMessage.direction === "inbound" &&
+            newMessage.to_number === user.phone_number
+          ) {
+            // Find client info
+            const client = clients.find((c) => c.id === newMessage.client_id);
+
+            if (client) {
+              addNotification({
+                id: newMessage.id,
+                clientId: newMessage.client_id,
+                clientName: `${client.first_name} ${client.last_name}`,
+                message: newMessage.content,
+                timestamp: new Date(newMessage.created_at),
+              });
+            }
+          }
+
+          // Update messages if viewing this client
+          if (selectedClient?.id === newMessage.client_id) {
+            setClientMessages((prev) => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                messages: [...prev.messages, newMessage].sort(
+                  (a, b) =>
+                    new Date(a.created_at).getTime() -
+                    new Date(b.created_at).getTime(),
+                ),
+              };
+            });
+          }
+        },
+      )
+      .subscribe();
+
+    setRealtimeChannel(channel);
+
+    // Cleanup subscription
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [user?.phone_number, selectedClient, clients, addNotification]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -215,8 +214,8 @@ const Messages = () => {
       setSendingMessage(true);
       await messageService.sendMessage(
         selectedClient.id!.toString(),
-        newMessage, // Don't trim here to preserve internal formatting
-        user.phone_number, // Use operator's phone number
+        newMessage,
+        user.phone_number,
       );
 
       setNewMessage("");
@@ -237,7 +236,6 @@ const Messages = () => {
       e.preventDefault();
       handleSendMessage();
     }
-    // Shift+Enter will naturally create a new line
   };
 
   const filteredClients = clients.filter(
@@ -325,8 +323,6 @@ const Messages = () => {
       )}
 
       <Grid container spacing={3} sx={{ height: "75vh" }}>
-        {" "}
-        {/* Fixed height for dashboard */}
         {/* Client List */}
         <Grid item xs={12} md={4}>
           <Paper
@@ -424,6 +420,7 @@ const Messages = () => {
             )}
           </Paper>
         </Grid>
+
         {/* Message Area */}
         <Grid item xs={12} md={8}>
           <Paper
@@ -467,7 +464,7 @@ const Messages = () => {
                 <Box
                   sx={{
                     flex: 1,
-                    overflow: "hidden", // Prevent this container from scrolling
+                    overflow: "hidden",
                     display: "flex",
                     flexDirection: "column",
                   }}
@@ -518,12 +515,11 @@ const Messages = () => {
                     <Box
                       sx={{
                         flex: 1,
-                        overflow: "auto", // Only this messages container scrolls
+                        overflow: "auto",
                         p: 2,
                         display: "flex",
                         flexDirection: "column",
                         gap: 2,
-                        // Custom scrollbar styling
                         "&::-webkit-scrollbar": {
                           width: "6px",
                         },
@@ -578,10 +574,10 @@ const Messages = () => {
                                   <Typography
                                     variant="body1"
                                     sx={{
-                                      whiteSpace: "pre-wrap", // Preserve whitespace and newlines
-                                      wordBreak: "break-word", // Handle long words/emojis
-                                      lineHeight: 1.4, // Better spacing for multiline
-                                      fontFamily: "inherit", // Consistent emoji rendering
+                                      whiteSpace: "pre-wrap",
+                                      wordBreak: "break-word",
+                                      lineHeight: 1.4,
+                                      fontFamily: "inherit",
                                     }}
                                   >
                                     {message.content}
@@ -641,7 +637,6 @@ const Messages = () => {
                           </Box>
                         );
                       })}
-                      {/* Invisible element to scroll to */}
                       <div ref={messagesEndRef} />
                     </Box>
                   )}
@@ -656,7 +651,7 @@ const Messages = () => {
                       theme.palette.background.default,
                       0.5,
                     ),
-                    flexShrink: 0, // Prevent this from shrinking
+                    flexShrink: 0,
                   }}
                 >
                   {!selectedClient.primary_phone ? (
@@ -700,8 +695,8 @@ const Messages = () => {
                         }
                         color="primary"
                         sx={{
-                          mb: 0.25, // Small bottom margin to align with text baseline
-                          flexShrink: 0, // Prevent button from shrinking
+                          mb: 0.25,
+                          flexShrink: 0,
                         }}
                       >
                         {sendingMessage ? (

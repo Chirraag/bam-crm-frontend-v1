@@ -7,7 +7,7 @@ import Login from "./pages/auth/Login";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import Calendar from "./pages/Calendar";
-import Messages from "./pages/Messages"; // ← ADDED: Import Messages component
+import Messages from "./pages/Messages";
 import { NotificationProvider } from "./context/NotificationContext";
 import NotificationPopup from "./components/NotificationPopup";
 
@@ -88,8 +88,7 @@ function App() {
                 <Messages />
               </ProtectedRoute>
             }
-          />{" "}
-          {/* ← ADDED: Messages route */}
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </NotificationProvider>

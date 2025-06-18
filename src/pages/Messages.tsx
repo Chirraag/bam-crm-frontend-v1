@@ -1,175 +1,88 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Box,
-  Grid,
   Paper,
   Typography,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  ListItemAvatar,
-  Avatar,
   TextField,
   IconButton,
-  Card,
-  CardContent,
+  List,
+  ListItem,
+  Avatar,
   Divider,
   CircularProgress,
-  Alert,
-  AlertTitle,
-  InputAdornment,
   Chip,
+  Alert,
+  InputAdornment,
+  Card,
+  CardContent,
   useTheme,
   alpha,
+  Badge,
+  Tooltip,
 } from "@mui/material";
 import {
   Send as SendIcon,
   Search as SearchIcon,
+  Phone as PhoneIcon,
   Sms as SmsIcon,
-  Person as PersonIcon,
-  AccessTime as TimeIcon,
-  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Schedule as ScheduleIcon,
+  ArrowBack as ArrowBackIcon,
 } from "@mui/icons-material";
 import Layout from "../components/Layout";
 import { Client } from "../types/client";
+import { Message, ClientMessages } from "../types/message";
 import { api, messageService } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../utils/supabaseClient";
-import { RealtimeChannel } from "@supabase/supabase-js";
 import { useNotifications } from "../context/NotificationContext";
-import { useLocation } from "react-router-dom";
+import { format, isToday, isYesterday, parseISO } from "date-fns";
 
-interface Message {
-  id: string;
-  client_id: string;
-  to_number: string;
-  from_number: string;
-  content: string;
-  direction: "inbound" | "outbound";
-  status: string;
-  user_id?: string;
-  created_at: string;
-}
-
-interface ClientMessages {
-  client_id: string;
-  client_phone: string;
-  messages: Message[];
-}
-
-const Messages = () => {
+export default function Messages() {
   const theme = useTheme();
+  const location = useLocation();
   const { user } = useAuth();
-  const location = useLocation(); // MOVED INSIDE component
-  const { addNotification } = useNotifications(); // MOVED INSIDE component
+  const { addNotification } = useNotifications();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const subscriptionRef = useRef<any>(null);
 
-  // All state hooks
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [clientMessages, setClientMessages] = useState<ClientMessages | null>(
-    null,
-  );
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
-  const [sendingMessage, setSendingMessage] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [realtimeChannel, setRealtimeChannel] =
-    useState<RealtimeChannel | null>(null); // MOVED INSIDE component
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
-
-  useEffect(() => {
-    if (selectedClient) {
-      fetchClientMessages(selectedClient.id!.toString());
-    }
-  }, [selectedClient]);
-
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    scrollToBottom();
-  }, [clientMessages]);
-
-  // Handle navigation from notification - MOVED INSIDE component
+  // Check if there's a pre-selected client from navigation state
   useEffect(() => {
     if (location.state?.selectedClientId) {
-      const client = clients.find(
-        (c) => c.id === location.state.selectedClientId,
-      );
+      const clientId = location.state.selectedClientId;
+      // Find and select the client after clients are loaded
+      const client = clients.find((c) => c.id?.toString() === clientId);
       if (client) {
-        setSelectedClient(client);
+        handleSelectClient(client);
       }
     }
   }, [location.state, clients]);
 
-  // Real-time subscription - MOVED INSIDE component
   useEffect(() => {
-    if (!user?.phone_number) return;
-
-    // Subscribe to new messages
-    const channel = supabase
-      .channel("messages-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `or(from_number.eq.${user.phone_number},to_number.eq.${user.phone_number})`,
-        },
-        async (payload) => {
-          const newMessage = payload.new as Message;
-
-          // If it's an inbound message, show notification
-          if (
-            newMessage.direction === "inbound" &&
-            newMessage.to_number === user.phone_number
-          ) {
-            // Find client info
-            const client = clients.find((c) => c.id === newMessage.client_id);
-
-            if (client) {
-              addNotification({
-                id: newMessage.id,
-                clientId: newMessage.client_id,
-                clientName: `${client.first_name} ${client.last_name}`,
-                message: newMessage.content,
-                timestamp: new Date(newMessage.created_at),
-              });
-            }
-          }
-
-          // Update messages if viewing this client
-          if (selectedClient?.id === newMessage.client_id) {
-            setClientMessages((prev) => {
-              if (!prev) return null;
-              return {
-                ...prev,
-                messages: [...prev.messages, newMessage].sort(
-                  (a, b) =>
-                    new Date(a.created_at).getTime() -
-                    new Date(b.created_at).getTime(),
-                ),
-              };
-            });
-          }
-        },
-      )
-      .subscribe();
-
-    setRealtimeChannel(channel);
-
-    // Cleanup subscription
+    fetchClients();
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+      // Cleanup subscription on unmount
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
       }
     };
-  }, [user?.phone_number, selectedClient, clients, addNotification]);
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -178,8 +91,8 @@ const Messages = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const clientsData = await api.get("/api/clients");
-      setClients(clientsData);
+      const response = await api.get("/api/clients");
+      setClients(response);
     } catch (error) {
       console.error("Error fetching clients:", error);
       setError("Failed to load clients");
@@ -188,19 +101,74 @@ const Messages = () => {
     }
   };
 
-  const fetchClientMessages = async (clientId: string) => {
+  const handleSelectClient = async (client: Client) => {
+    // Cleanup previous subscription
+    if (subscriptionRef.current) {
+      subscriptionRef.current.unsubscribe();
+    }
+
+    setSelectedClient(client);
+    setLoadingMessages(true);
+    setError(null);
+
     try {
-      const messagesData = await messageService.getClientMessages(clientId);
-      setClientMessages(messagesData);
-      setError(null);
+      // Fetch initial messages
+      const messagesData: ClientMessages =
+        await messageService.getClientMessages(client.id!.toString());
+      setMessages(messagesData.messages || []);
+
+      // Set up real-time subscription for this client's messages
+      subscriptionRef.current = supabase
+        .channel(`messages:client:${client.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "messages",
+            filter: `client_id=eq.${client.id}`,
+          },
+          (payload) => {
+            console.log("Realtime message update:", payload);
+
+            if (payload.eventType === "INSERT") {
+              const newMsg = payload.new as Message;
+              setMessages((prev) => [...prev, newMsg]);
+
+              // Show notification if it's an inbound message and not from current user
+              if (newMsg.direction === "inbound") {
+                addNotification({
+                  id: newMsg.id,
+                  clientId: client.id!.toString(),
+                  clientName: `${client.first_name} ${client.last_name}`,
+                  message: newMsg.content,
+                  timestamp: new Date(newMsg.created_at),
+                });
+              }
+            } else if (payload.eventType === "UPDATE") {
+              const updatedMsg = payload.new as Message;
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === updatedMsg.id ? updatedMsg : msg,
+                ),
+              );
+            } else if (payload.eventType === "DELETE") {
+              const deletedId = payload.old.id;
+              setMessages((prev) => prev.filter((msg) => msg.id !== deletedId));
+            }
+          },
+        )
+        .subscribe();
     } catch (error) {
-      console.error("Error fetching messages:", error);
+      console.error("Error loading messages:", error);
       setError("Failed to load messages");
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !selectedClient || sendingMessage) return;
+    if (!newMessage.trim() || !selectedClient) return;
 
     // Check if operator has a phone number
     if (!user?.phone_number) {
@@ -210,531 +178,522 @@ const Messages = () => {
       return;
     }
 
+    setSending(true);
+    setError(null);
+
     try {
-      setSendingMessage(true);
       await messageService.sendMessage(
         selectedClient.id!.toString(),
-        newMessage,
+        newMessage.trim(),
         user.phone_number,
       );
 
       setNewMessage("");
-      // Refresh messages after sending
-      await fetchClientMessages(selectedClient.id!.toString());
-      setError(null);
     } catch (error) {
       console.error("Error sending message:", error);
-      setError("Failed to send message");
+      setError("Failed to send message. Please try again.");
     } finally {
-      setSendingMessage(false);
+      setSending(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    // Send on Enter (but allow Shift+Enter for new lines)
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  const filteredClients = clients.filter(
-    (client) =>
-      `${client.first_name} ${client.last_name}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      client.primary_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.primary_phone?.includes(searchTerm),
-  );
+  const formatMessageTime = (dateString: string) => {
+    const date = parseISO(dateString);
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    if (isToday(date)) {
+      return format(date, "h:mm a");
+    } else if (isYesterday(date)) {
+      return `Yesterday ${format(date, "h:mm a")}`;
+    }
+    return format(date, "MMM d, h:mm a");
+  };
 
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else if (diffInHours < 24 * 7) {
-      return date.toLocaleDateString([], {
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else {
-      return date.toLocaleDateString([], {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "delivered":
+        return <CheckCircleIcon sx={{ fontSize: 14 }} />;
+      case "sent":
+        return <CheckCircleIcon sx={{ fontSize: 14, opacity: 0.5 }} />;
+      case "failed":
+        return <ErrorIcon sx={{ fontSize: 14, color: "error.main" }} />;
+      case "pending":
+        return <ScheduleIcon sx={{ fontSize: 14 }} />;
+      default:
+        return null;
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "delivered":
+      case "received":
         return theme.palette.success.main;
       case "sent":
         return theme.palette.info.main;
       case "failed":
         return theme.palette.error.main;
-      case "received":
-        return theme.palette.primary.main;
+      case "pending":
+        return theme.palette.warning.main;
       default:
         return theme.palette.text.secondary;
     }
   };
 
+  const filteredClients = clients.filter(
+    (client) =>
+      client.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      client.primary_phone?.includes(searchTerm),
+  );
+
+  // Group messages by date
+  const groupMessagesByDate = (messages: Message[]) => {
+    const groups: { [key: string]: Message[] } = {};
+
+    messages.forEach((message) => {
+      const date = parseISO(message.created_at);
+      let key: string;
+
+      if (isToday(date)) {
+        key = "Today";
+      } else if (isYesterday(date)) {
+        key = "Yesterday";
+      } else {
+        key = format(date, "MMMM d, yyyy");
+      }
+
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(message);
+    });
+
+    return groups;
+  };
+
+  const messageGroups = groupMessagesByDate(messages);
+
   return (
     <Layout>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" fontWeight="500" sx={{ mb: 1 }}>
-          Messages
-        </Typography>
-        <Typography color="text.secondary">
-          Send and receive SMS messages with your clients
-        </Typography>
-        {user?.phone_number && (
-          <Typography
-            variant="body2"
-            color="primary"
-            sx={{ mt: 1 }}
-          ></Typography>
-        )}
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
-      {!user?.phone_number && (
-        <Alert severity="warning" sx={{ mb: 3 }} icon={<WarningIcon />}>
-          <AlertTitle>Phone Number Required</AlertTitle>
-          Your account does not have a phone number assigned. You will not be
-          able to send or receive messages until an administrator assigns a
-          phone number to your account. You are currently logged in as{" "}
-          <strong>{user?.name || user?.email}</strong>.
-        </Alert>
-      )}
-
-      <Grid container spacing={3} sx={{ height: "75vh" }}>
+      <Box sx={{ height: "calc(100vh - 100px)", display: "flex", gap: 3 }}>
         {/* Client List */}
-        <Grid item xs={12} md={4}>
-          <Paper
-            elevation={0}
-            sx={{
-              height: "100%",
-              borderRadius: 2,
-              border: `1px solid ${theme.palette.divider}`,
-              display: "flex",
-              flexDirection: "column",
-            }}
+        <Paper
+          elevation={0}
+          sx={{
+            width: 350,
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <Box
+            sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}
           >
-            <Box
-              sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}
-            >
-              <TextField
-                fullWidth
-                placeholder="Search clients..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                size="small"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon fontSize="small" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Box>
+            <Typography variant="h6" fontWeight={600} gutterBottom>
+              Messages
+            </Typography>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search clients..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{
+                "& .MuiOutlinedInput-root": {
+                  borderRadius: 2,
+                },
+              }}
+            />
+          </Box>
 
+          <Box sx={{ flex: 1, overflow: "auto" }}>
             {loading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              <List sx={{ flex: 1, overflow: "auto", p: 0 }}>
-                {filteredClients.map((client) => (
-                  <ListItem key={client.id} disablePadding>
-                    <ListItemButton
-                      selected={selectedClient?.id === client.id}
-                      onClick={() => setSelectedClient(client)}
-                      sx={{
-                        p: 2,
-                        "&.Mui-selected": {
-                          backgroundColor: alpha(
-                            theme.palette.primary.main,
-                            0.1,
-                          ),
-                          "&:hover": {
-                            backgroundColor: alpha(
-                              theme.palette.primary.main,
-                              0.15,
-                            ),
-                          },
-                        },
-                      }}
-                    >
-                      <ListItemAvatar>
-                        <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
-                          {client.first_name?.charAt(0)}
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={`${client.first_name} ${client.last_name}`}
-                        secondary={
-                          <Box>
-                            <Typography variant="body2" color="text.secondary">
-                              {client.primary_phone || "No phone number"}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {client.primary_email}
-                            </Typography>
-                          </Box>
-                        }
-                      />
-                    </ListItemButton>
-                  </ListItem>
-                ))}
-
-                {filteredClients.length === 0 && !loading && (
-                  <Box sx={{ textAlign: "center", p: 4 }}>
-                    <PersonIcon
-                      sx={{ fontSize: 48, color: "text.secondary", mb: 2 }}
-                    />
-                    <Typography color="text.secondary">
-                      {searchTerm ? "No clients found" : "No clients available"}
-                    </Typography>
-                  </Box>
-                )}
-              </List>
-            )}
-          </Paper>
-        </Grid>
-
-        {/* Message Area */}
-        <Grid item xs={12} md={8}>
-          <Paper
-            elevation={0}
-            sx={{
-              height: "100%",
-              borderRadius: 2,
-              border: `1px solid ${theme.palette.divider}`,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {selectedClient ? (
-              <>
-                {/* Header */}
-                <Box
-                  sx={{
-                    p: 2,
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: alpha(theme.palette.primary.main, 0.05),
-                  }}
-                >
-                  <Box sx={{ display: "flex", alignItems: "center" }}>
-                    <Avatar sx={{ bgcolor: theme.palette.primary.main, mr: 2 }}>
-                      {selectedClient.first_name?.charAt(0)}
-                    </Avatar>
-                    <Box>
-                      <Typography variant="h6" sx={{ fontWeight: 500 }}>
-                        {selectedClient.first_name} {selectedClient.last_name}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {clientMessages?.client_phone ||
-                          selectedClient.primary_phone ||
-                          "No phone number"}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Box>
-
-                {/* Messages */}
-                <Box
-                  sx={{
-                    flex: 1,
-                    overflow: "hidden",
-                    display: "flex",
-                    flexDirection: "column",
-                  }}
-                >
-                  {!user?.phone_number ? (
-                    <Box
-                      sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: "100%",
-                        textAlign: "center",
-                        color: "text.secondary",
-                        p: 3,
-                      }}
-                    >
-                      <WarningIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                      <Typography variant="h6" gutterBottom>
-                        No phone number assigned
-                      </Typography>
-                      <Typography variant="body2">
-                        You cannot view or send messages because your account
-                        doesn't have a phone number assigned.
-                      </Typography>
-                    </Box>
-                  ) : clientMessages?.messages.length === 0 ? (
-                    <Box
-                      sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: "100%",
-                        textAlign: "center",
-                        color: "text.secondary",
-                      }}
-                    >
-                      <SmsIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                      <Typography variant="h6" gutterBottom>
-                        No messages yet
-                      </Typography>
-                      <Typography variant="body2">
-                        Start a conversation by sending a message below
-                      </Typography>
-                    </Box>
-                  ) : (
-                    <Box
-                      sx={{
-                        flex: 1,
-                        overflow: "auto",
-                        p: 2,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                        "&::-webkit-scrollbar": {
-                          width: "6px",
-                        },
-                        "&::-webkit-scrollbar-track": {
-                          backgroundColor: "transparent",
-                        },
-                        "&::-webkit-scrollbar-thumb": {
-                          backgroundColor: alpha(
-                            theme.palette.text.secondary,
-                            0.2,
-                          ),
-                          borderRadius: "3px",
-                          "&:hover": {
-                            backgroundColor: alpha(
-                              theme.palette.text.secondary,
-                              0.3,
-                            ),
-                          },
-                        },
-                      }}
-                    >
-                      {clientMessages?.messages.map((message) => {
-                        const isOutbound = message.direction === "outbound";
-
-                        return (
-                          <Box
-                            key={message.id}
-                            sx={{
-                              display: "flex",
-                              justifyContent: isOutbound
-                                ? "flex-end"
-                                : "flex-start",
-                              mb: 1,
-                            }}
-                          >
-                            <Box sx={{ maxWidth: "70%" }}>
-                              <Card
-                                elevation={0}
-                                sx={{
-                                  backgroundColor: isOutbound
-                                    ? theme.palette.primary.main
-                                    : theme.palette.grey[100],
-                                  color: isOutbound ? "white" : "text.primary",
-                                  borderRadius: 2,
-                                  borderTopRightRadius: isOutbound ? 0 : 2,
-                                  borderTopLeftRadius: !isOutbound ? 0 : 2,
-                                }}
-                              >
-                                <CardContent
-                                  sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}
-                                >
-                                  <Typography
-                                    variant="body1"
-                                    sx={{
-                                      whiteSpace: "pre-wrap",
-                                      wordBreak: "break-word",
-                                      lineHeight: 1.4,
-                                      fontFamily: "inherit",
-                                    }}
-                                  >
-                                    {message.content}
-                                  </Typography>
-                                </CardContent>
-                              </Card>
-
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: isOutbound
-                                    ? "flex-end"
-                                    : "flex-start",
-                                  gap: 1,
-                                  mt: 0.5,
-                                }}
-                              >
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {formatTime(message.created_at)}
-                                </Typography>
-
-                                {isOutbound && (
-                                  <>
-                                    <Chip
-                                      label={message.status}
-                                      size="small"
-                                      sx={{
-                                        height: 16,
-                                        fontSize: "0.7rem",
-                                        backgroundColor: alpha(
-                                          getStatusColor(message.status),
-                                          0.1,
-                                        ),
-                                        color: getStatusColor(message.status),
-                                        "& .MuiChip-label": { px: 1 },
-                                      }}
-                                    />
-                                    {message.from_number &&
-                                      message.from_number !==
-                                        user?.phone_number && (
-                                        <Typography
-                                          variant="caption"
-                                          color="text.secondary"
-                                          sx={{ fontSize: "0.7rem" }}
-                                        >
-                                          • Sent from: {message.from_number}
-                                        </Typography>
-                                      )}
-                                  </>
-                                )}
-                              </Box>
-                            </Box>
-                          </Box>
-                        );
-                      })}
-                      <div ref={messagesEndRef} />
-                    </Box>
-                  )}
-                </Box>
-
-                {/* Send Message */}
-                <Box
-                  sx={{
-                    p: 2,
-                    borderTop: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: alpha(
-                      theme.palette.background.default,
-                      0.5,
-                    ),
-                    flexShrink: 0,
-                  }}
-                >
-                  {!selectedClient.primary_phone ? (
-                    <Alert severity="warning">
-                      This client doesn't have a phone number. Please add one to
-                      send messages.
-                    </Alert>
-                  ) : !user?.phone_number ? (
-                    <Alert severity="error">
-                      You cannot send messages because your account doesn't have
-                      a phone number assigned.
-                    </Alert>
-                  ) : (
-                    <Box
-                      sx={{ display: "flex", alignItems: "flex-end", gap: 1 }}
-                    >
-                      <TextField
-                        fullWidth
-                        placeholder="Type your message... (Shift+Enter for new line)"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        disabled={sendingMessage}
-                        multiline
-                        maxRows={4}
-                        minRows={1}
-                        size="small"
-                        sx={{
-                          "& .MuiInputBase-input": {
-                            lineHeight: 1.4,
-                            fontFamily: "inherit",
-                          },
-                        }}
-                      />
-                      <IconButton
-                        onClick={handleSendMessage}
-                        disabled={
-                          !newMessage.trim() ||
-                          sendingMessage ||
-                          !user?.phone_number
-                        }
-                        color="primary"
-                        sx={{
-                          mb: 0.25,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {sendingMessage ? (
-                          <CircularProgress size={20} />
-                        ) : (
-                          <SendIcon />
-                        )}
-                      </IconButton>
-                    </Box>
-                  )}
-                </Box>
-              </>
-            ) : (
               <Box
                 sx={{
                   display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
                   justifyContent: "center",
+                  alignItems: "center",
                   height: "100%",
-                  textAlign: "center",
-                  color: "text.secondary",
                 }}
               >
-                <SmsIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
-                <Typography variant="h6" gutterBottom>
-                  Select a client to start messaging
-                </Typography>
-                <Typography variant="body2">
-                  Choose a client from the list to view and send SMS messages
-                </Typography>
+                <CircularProgress />
               </Box>
+            ) : (
+              <List sx={{ p: 0 }}>
+                {filteredClients.map((client) => {
+                  const isSelected = selectedClient?.id === client.id;
+                  const hasPhone = Boolean(client.primary_phone);
+
+                  return (
+                    <ListItem
+                      key={client.id}
+                      button
+                      selected={isSelected}
+                      onClick={() => hasPhone && handleSelectClient(client)}
+                      disabled={!hasPhone}
+                      sx={{
+                        py: 2,
+                        px: 2,
+                        borderBottom: `1px solid ${alpha(
+                          theme.palette.divider,
+                          0.1,
+                        )}`,
+                        "&.Mui-selected": {
+                          backgroundColor: alpha(
+                            theme.palette.primary.main,
+                            0.08,
+                          ),
+                          borderLeft: `3px solid ${theme.palette.primary.main}`,
+                        },
+                        "&:hover": {
+                          backgroundColor: alpha(
+                            theme.palette.action.hover,
+                            0.5,
+                          ),
+                        },
+                        opacity: hasPhone ? 1 : 0.5,
+                      }}
+                    >
+                      <Avatar
+                        sx={{
+                          bgcolor: hasPhone
+                            ? theme.palette.primary.main
+                            : theme.palette.grey[400],
+                          mr: 2,
+                        }}
+                      >
+                        {client.first_name?.charAt(0)}
+                      </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {client.first_name} {client.last_name}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                          }}
+                        >
+                          <PhoneIcon sx={{ fontSize: 14 }} />
+                          {client.primary_phone || "No phone number"}
+                        </Typography>
+                      </Box>
+                      {hasPhone && (
+                        <Badge
+                          color="primary"
+                          variant="dot"
+                          invisible={!isSelected}
+                        />
+                      )}
+                    </ListItem>
+                  );
+                })}
+              </List>
             )}
-          </Paper>
-        </Grid>
-      </Grid>
+          </Box>
+        </Paper>
+
+        {/* Chat Area */}
+        <Paper
+          elevation={0}
+          sx={{
+            flex: 1,
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          {selectedClient ? (
+            <>
+              {/* Chat Header */}
+              <Box
+                sx={{
+                  p: 2,
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 2,
+                  background: `linear-gradient(135deg, ${alpha(
+                    theme.palette.primary.main,
+                    0.05,
+                  )} 0%, ${alpha(theme.palette.primary.main, 0.02)} 100%)`,
+                }}
+              >
+                <Avatar sx={{ bgcolor: theme.palette.primary.main }}>
+                  {selectedClient.first_name?.charAt(0)}
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" fontWeight={600}>
+                    {selectedClient.first_name} {selectedClient.last_name}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                  >
+                    <PhoneIcon sx={{ fontSize: 14 }} />
+                    {selectedClient.primary_phone}
+                  </Typography>
+                </Box>
+                <Chip
+                  label={selectedClient.case_status}
+                  size="small"
+                  color={
+                    selectedClient.case_status === "Active"
+                      ? "success"
+                      : selectedClient.case_status === "Pending"
+                        ? "warning"
+                        : "default"
+                  }
+                />
+              </Box>
+
+              {/* Messages Area */}
+              <Box
+                sx={{
+                  flex: 1,
+                  overflow: "auto",
+                  p: 2,
+                  backgroundColor: alpha(theme.palette.grey[100], 0.5),
+                }}
+              >
+                {loadingMessages ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      height: "100%",
+                    }}
+                  >
+                    <CircularProgress />
+                  </Box>
+                ) : messages.length === 0 ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      height: "100%",
+                      color: "text.secondary",
+                    }}
+                  >
+                    <SmsIcon sx={{ fontSize: 64, mb: 2, opacity: 0.3 }} />
+                    <Typography variant="h6" gutterBottom>
+                      No messages yet
+                    </Typography>
+                    <Typography variant="body2">
+                      Send a message to start the conversation
+                    </Typography>
+                  </Box>
+                ) : (
+                  <>
+                    {Object.entries(messageGroups).map(
+                      ([date, groupMessages]) => (
+                        <Box key={date}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "center",
+                              my: 2,
+                            }}
+                          >
+                            <Chip
+                              label={date}
+                              size="small"
+                              sx={{
+                                backgroundColor: alpha(
+                                  theme.palette.text.primary,
+                                  0.08,
+                                ),
+                                fontWeight: 500,
+                              }}
+                            />
+                          </Box>
+                          {groupMessages.map((message) => (
+                            <Box
+                              key={message.id}
+                              sx={{
+                                display: "flex",
+                                justifyContent:
+                                  message.direction === "outbound"
+                                    ? "flex-end"
+                                    : "flex-start",
+                                mb: 2,
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  maxWidth: "70%",
+                                  backgroundColor:
+                                    message.direction === "outbound"
+                                      ? theme.palette.primary.main
+                                      : "white",
+                                  color:
+                                    message.direction === "outbound"
+                                      ? "white"
+                                      : "text.primary",
+                                  borderRadius: 2,
+                                  p: 2,
+                                  boxShadow: 1,
+                                  position: "relative",
+                                }}
+                              >
+                                <Typography variant="body1">
+                                  {message.content}
+                                </Typography>
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 0.5,
+                                    mt: 1,
+                                  }}
+                                >
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      opacity: 0.7,
+                                      fontSize: "0.75rem",
+                                    }}
+                                  >
+                                    {formatMessageTime(message.created_at)}
+                                  </Typography>
+                                  {message.direction === "outbound" && (
+                                    <Box
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        color:
+                                          message.status === "failed"
+                                            ? theme.palette.error.main
+                                            : "inherit",
+                                      }}
+                                    >
+                                      {getStatusIcon(message.status)}
+                                    </Box>
+                                  )}
+                                </Box>
+                              </Box>
+                            </Box>
+                          ))}
+                        </Box>
+                      ),
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </Box>
+
+              {/* Message Input */}
+              <Box
+                sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}
+              >
+                {error && (
+                  <Alert
+                    severity="error"
+                    sx={{ mb: 2 }}
+                    onClose={() => setError(null)}
+                  >
+                    {error}
+                  </Alert>
+                )}
+                {!user?.phone_number ? (
+                  <Alert severity="warning">
+                    You cannot send messages because your account doesn't have a
+                    phone number assigned. Please contact the administrator.
+                  </Alert>
+                ) : (
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      maxRows={4}
+                      placeholder="Type your message..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      disabled={sending}
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 2,
+                        },
+                      }}
+                    />
+                    <Tooltip title="Send message">
+                      <span>
+                        <IconButton
+                          color="primary"
+                          onClick={handleSendMessage}
+                          disabled={!newMessage.trim() || sending}
+                          sx={{
+                            bgcolor: theme.palette.primary.main,
+                            color: "white",
+                            "&:hover": {
+                              bgcolor: theme.palette.primary.dark,
+                            },
+                            "&.Mui-disabled": {
+                              bgcolor: alpha(theme.palette.primary.main, 0.3),
+                              color: alpha(theme.palette.common.white, 0.5),
+                            },
+                          }}
+                        >
+                          {sending ? (
+                            <CircularProgress size={24} color="inherit" />
+                          ) : (
+                            <SendIcon />
+                          )}
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Box>
+                )}
+              </Box>
+            </>
+          ) : (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                color: "text.secondary",
+              }}
+            >
+              <SmsIcon sx={{ fontSize: 80, mb: 2, opacity: 0.3 }} />
+              <Typography variant="h5" gutterBottom>
+                Select a client to start messaging
+              </Typography>
+              <Typography variant="body2">
+                Choose a client from the list to view and send messages
+              </Typography>
+            </Box>
+          )}
+        </Paper>
+      </Box>
     </Layout>
   );
-};
-
-export default Messages;
+}

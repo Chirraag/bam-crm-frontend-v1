@@ -373,8 +373,14 @@ export default function Messages() {
                         },
                         "&:hover": {
                           backgroundColor: alpha(
-                            theme.palette.action.hover,
-                            0.5,
+                            theme.palette.primary.main,
+                            0.05,
+                          ),
+                        },
+                        "&.Mui-selected:hover": {
+                          backgroundColor: alpha(
+                            theme.palette.primary.main,
+                            0.08,
                           ),
                         },
                         opacity: hasPhone ? 1 : 0.5,
@@ -571,7 +577,10 @@ export default function Messages() {
                                   position: "relative",
                                 }}
                               >
-                                <Typography variant="body1">
+                                <Typography
+                                  variant="body1"
+                                  sx={{ whiteSpace: "pre-wrap" }}
+                                >
                                   {message.content}
                                 </Typography>
                                 <Box

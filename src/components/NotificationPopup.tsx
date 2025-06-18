@@ -55,13 +55,17 @@ export default function NotificationPopup() {
                 p: 2,
                 cursor: "pointer",
                 backgroundColor: "white",
-                border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+                border: `1px solid ${alpha(theme.palette.divider, 0.2)}`,
                 borderRadius: 2,
                 minWidth: 350,
+                position: "relative",
+                boxSizing: "border-box",
+                transition: "all 0.2s ease",
                 "&:hover": {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.02),
                   transform: "translateX(-4px)",
-                  transition: "all 0.2s ease",
+                  borderColor: theme.palette.primary.main,
+                  borderWidth: 2,
+                  padding: "15px", // Adjust padding to compensate for border width change
                 },
               }}
               onClick={() => handleClick(notification)}
@@ -79,21 +83,10 @@ export default function NotificationPopup() {
 
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="subtitle2" fontWeight={600}>
-                    New message from {notification.clientName}
+                    New message
                   </Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: "250px",
-                    }}
-                  >
-                    {notification.message}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary">
+                    {notification.clientName} •{" "}
                     {new Date(notification.timestamp).toLocaleTimeString()}
                   </Typography>
                 </Box>

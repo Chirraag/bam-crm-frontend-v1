@@ -32,7 +32,8 @@ import {
   MoreVert as MoreVertIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Visibility as VisibilityIcon
+  Visibility as VisibilityIcon,
+  Comment as EditNoteIcon
 } from '@mui/icons-material';
 import Layout from '../components/Layout';
 import { Client, ColumnMetadata } from '../types/client';
@@ -41,6 +42,7 @@ import ClientDetailsDialog from '../components/ClientDetailsDialog';
 import { api } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { columnService } from '../services/columnService';
+import NotesDialog from '../components/NotesDialog';
 
 const Clients = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -52,6 +54,7 @@ const Clients = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [dynamicColumns, setDynamicColumns] = useState<ColumnMetadata[]>([]);
   const { user } = useAuth();
 
@@ -228,6 +231,8 @@ const Clients = () => {
     return fixedFieldsMatch || dynamicFieldsMatch;
   });
 
+
+
   return (
     <Layout>
       <Box sx={{ mb: 4 }}>
@@ -282,7 +287,7 @@ const Clients = () => {
                     <TableCell>Case Type</TableCell>
                     <TableCell>Case Status</TableCell>
                     <TableCell>Created At</TableCell>
-                    <TableCell align="right">Actions</TableCell>
+                    <TableCell align="left">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -318,14 +323,47 @@ const Clients = () => {
                         />
                       </TableCell>
                       <TableCell>{new Date(client.created_at).toLocaleDateString()}</TableCell>
-                      <TableCell align="right">
+                      <TableCell align="left" >
+                        <ListItemIcon style={{minWidth:"40px" , cursor:"pointer"}} onClick={() => {setSelectedClient(client);setNotesDialogOpen(true);}}>
+                          <EditNoteIcon fontSize="medium" />
+                        </ListItemIcon>
+                        <ListItemIcon style={{minWidth:"40px", cursor:"pointer"}} onClick={handleEditClient}>
+                          <EditIcon fontSize="medium" />
+                        </ListItemIcon>
+                        <ListItemIcon sx={{ color: 'error.main' }} style={{minWidth:"40px", cursor:"pointer"}} onClick={handleDeleteClient}>
+                          <DeleteIcon fontSize="medium" />
+                        </ListItemIcon>
+                      </TableCell>
+                      {/* <TableCell align="left" style={{display:"flex", flexDirection:"column" , gap:"8px"}}>
+                        <div style={{display:"flex" , gap:"4px" , cursor:"pointer"}}>
+                        <ListItemIcon style={{minWidth:"28px"}}>
+                          <EditNoteIcon fontSize="medium" />
+                        </ListItemIcon>
+                        <p>Notes</p>
+                        </div>
+                        <div style={{display:"flex" , gap:"4px", cursor:"pointer"}}>
+                        <ListItemIcon style={{minWidth:"28px"}}>
+                          <EditIcon fontSize="medium" />
+                        </ListItemIcon>
+                        <p>Edit</p>
+                        </div>
+                        <div style={{display:"flex" , gap:"4px" , cursor:"pointer"}}>
+                        <ListItemIcon sx={{ color: 'error.main' }} style={{minWidth:"28px"}}>
+                          <DeleteIcon fontSize="medium" />
+                        </ListItemIcon>
+                        <p>Delete</p>
+                        </div>
+                      </TableCell> */}
+
+                      
+                      {/* <TableCell align="right">
                         <IconButton
                           aria-label="more"
                           onClick={(event) => handleOpenMenu(event, client)}
                         >
                           <MoreVertIcon />
                         </IconButton>
-                      </TableCell>
+                      </TableCell> */}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -391,6 +429,13 @@ const Clients = () => {
         onClose={() => setDetailsDialogOpen(false)}
         client={selectedClient}
       />
+
+      <NotesDialog
+        open={notesDialogOpen}
+        onClose={() => setNotesDialogOpen(false)}
+        client={selectedClient}
+      />
+
     </Layout>
   );
 };

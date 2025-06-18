@@ -37,14 +37,12 @@ import { Message, ClientMessages } from "../types/message";
 import { api, messageService } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../utils/supabaseClient";
-import { useNotifications } from "../context/NotificationContext";
 import { format, isToday, isYesterday, parseISO } from "date-fns";
 
 export default function Messages() {
   const theme = useTheme();
   const location = useLocation();
   const { user } = useAuth();
-  const { addNotification } = useNotifications();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const subscriptionRef = useRef<any>(null);
 
@@ -84,6 +82,17 @@ export default function Messages() {
     scrollToBottom();
   }, [messages]);
 
+  // Auto-clear error if we have messages
+  useEffect(() => {
+    if (error && messages.length > 0) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 3000); // Clear after 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [error, messages.length]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -109,15 +118,29 @@ export default function Messages() {
 
     setSelectedClient(client);
     setLoadingMessages(true);
-    setError(null);
+    setError(null); // Always clear previous errors when switching clients
 
     try {
       // Fetch initial messages
       const messagesData: ClientMessages =
         await messageService.getClientMessages(client.id!.toString());
-      setMessages(messagesData.messages || []);
 
-      // Set up real-time subscription for this client's messages
+      // Handle the response safely
+      const messages = messagesData?.messages || [];
+      setMessages(messages);
+
+      // Clear error on successful load
+      setError(null);
+    } catch (error) {
+      console.error("Error loading messages:", error);
+      setError("Failed to load messages");
+    } finally {
+      // Always set loading to false
+      setLoadingMessages(false);
+    }
+
+    // Set up real-time subscription separately (don't let it affect error state)
+    try {
       subscriptionRef.current = supabase
         .channel(`messages:client:${client.id}`)
         .on(
@@ -134,17 +157,6 @@ export default function Messages() {
             if (payload.eventType === "INSERT") {
               const newMsg = payload.new as Message;
               setMessages((prev) => [...prev, newMsg]);
-
-              // Show notification if it's an inbound message and not from current user
-              if (newMsg.direction === "inbound") {
-                addNotification({
-                  id: newMsg.id,
-                  clientId: client.id!.toString(),
-                  clientName: `${client.first_name} ${client.last_name}`,
-                  message: newMsg.content,
-                  timestamp: new Date(newMsg.created_at),
-                });
-              }
             } else if (payload.eventType === "UPDATE") {
               const updatedMsg = payload.new as Message;
               setMessages((prev) =>
@@ -159,11 +171,9 @@ export default function Messages() {
           },
         )
         .subscribe();
-    } catch (error) {
-      console.error("Error loading messages:", error);
-      setError("Failed to load messages");
-    } finally {
-      setLoadingMessages(false);
+    } catch (subscriptionError) {
+      // Log but don't show subscription errors to user
+      console.error("Realtime subscription setup error:", subscriptionError);
     }
   };
 
@@ -611,7 +621,7 @@ export default function Messages() {
               <Box
                 sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}
               >
-                {error && (
+                {error && messages.length === 0 && (
                   <Alert
                     severity="error"
                     sx={{ mb: 2 }}

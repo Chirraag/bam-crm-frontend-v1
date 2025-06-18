@@ -10,6 +10,7 @@ import Calendar from "./pages/Calendar";
 import Messages from "./pages/Messages";
 import { NotificationProvider } from "./context/NotificationContext";
 import NotificationPopup from "./components/NotificationPopup";
+import GlobalMessageListener from "./components/GlobalMessageListener";
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
@@ -54,6 +55,7 @@ function App() {
   return (
     <AuthProvider>
       <NotificationProvider>
+        <GlobalMessageListener />
         <NotificationPopup />
         <Routes>
           <Route path="/login" element={<Login />} />

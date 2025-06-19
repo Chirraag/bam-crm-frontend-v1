@@ -30,7 +30,7 @@ interface Note {
 interface NotesDialogProps {
   open: boolean;
   onClose: () => void;
-  client: Client;
+  client: Client | null;
 }
 
 const NotesDialog: React.FC<NotesDialogProps> = ({ open, onClose, client }) => {

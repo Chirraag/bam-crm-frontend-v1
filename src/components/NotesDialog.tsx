@@ -46,7 +46,7 @@ const NotesDialog: React.FC<NotesDialogProps> = ({ open, onClose, client }) => {
         if (!client.id) {
           throw new Error("Client ID is required to fetch notes");
         }
-        const response = await api.get(`/api/notes/${client.id}`);
+        const response = await api.get(`/api/notes/${client?.id}`);
         // console.log('Fetched notes:', response);
         setNotes(response ? response : []);
       } catch (error) {

@@ -11,4 +11,5 @@ export interface Mail{
     parsed_body : string | null;
     received_at? : string; 
     sent_at? : string;
+    attachments? : { [key: string]: string }[];
 }

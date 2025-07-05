@@ -13,10 +13,12 @@ import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import SendIcon from "@mui/icons-material/Send";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { Fab } from "@mui/material";
 import EmailDialog from "./EmailDialog";
 import { Client } from "../types/client";
 import { Mail } from "../types/mail";
+import { supabase } from "../utils/supabaseClient";
 
 interface MailConversationDialogProps {
   open: boolean;
@@ -44,6 +46,9 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
 
   const [loadMails, setLoadMails] = React.useState<Boolean>(false);
   const [mailSend, setMailSend] = React.useState<Boolean>(false);
+  const [selectedAttachments, setSelectedAttachments] = React.useState<
+    { [key: string]: string }[]
+  >([]);
 
   useEffect(() => {
     async function groupConversationsByParentSubject() {
@@ -109,6 +114,83 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
     groupConversationsByParentSubject();
   }, [client]);
 
+  const handleUploads = async (files: File[]) => {
+    try {
+      const clientId = client?.id;
+      for (const file of files) {
+        const fileExt = file.name.split(".").pop();
+        const folderName = `client_${clientId}`;
+        const fileName = `${folderName}/${Date.now()}.${fileExt}`;
+
+        // For public buckets, we can upload without authentication
+        const { data, error: uploadError } = await supabase.storage
+          .from("client-documents")
+          .upload(fileName, file, {
+            cacheControl: "3600",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error("Upload error details:", uploadError);
+          throw uploadError;
+        }
+
+        // Get the public URL for the uploaded file
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("client-documents").getPublicUrl(fileName);
+        setSelectedAttachments((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            url: publicUrl,
+          },
+        ]);
+        console.log(selectedAttachments)
+      }
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      alert("Failed to upload files. Please try again.");
+      return;
+    }
+  };
+
+  const handleDeleteDocument = async (docName: string) => {
+    const clientId = client?.id;
+    if (!clientId) {
+      alert("Cannot delete documents - invalid client ID");
+      return;
+    }
+
+    try {
+      const url = docName;
+
+      const urlParts = url.split("/");
+      const fileName = urlParts[urlParts.length - 1];
+      const folderName = `client_${clientId}`;
+      const fullPath = `${folderName}/${fileName}`;
+
+      // For public buckets, we can delete without authentication
+      const { error: deleteError } = await supabase.storage
+        .from("client-documents")
+        .remove([fullPath]);
+
+      if (deleteError) {
+        console.error("Delete error details:", deleteError);
+        throw deleteError;
+      }
+      // Remove the file from the attachments state
+      setSelectedAttachments((prev) => prev.filter((att) => att.url !== url));
+
+      console.log("File deleted successfully:", url);
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      alert(
+        error instanceof Error ? error.message : "Failed to delete document"
+      );
+    }
+  };
+
   const handleSend = async () => {
     setMailSend(true);
     setContent(content.trim());
@@ -133,6 +215,7 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
         const tempMails = [...Mails];
         tempMails[messageIndex]["chain"] = updatedMails;
         setMails(tempMails);
+        setSelectedAttachments([]);
         console.log("Email sent successfully:", response);
       }
     } catch (error) {
@@ -184,10 +267,15 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
                 px: 3,
                 position: "relative",
                 pb: "20px",
+                minHeight: "450px",
               }}
             >
               {Mails.length === 0 ? (
-                <Typography align="center" color="textSecondary" sx={{ py: 5 }}>
+                <Typography
+                  align="center"
+                  color="textSecondary"
+                  sx={{ py: 5, minHeight: "450px", verticalAlign: "middle" }}
+                >
                   No conversation yet.
                 </Typography>
               ) : (
@@ -277,17 +365,19 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
         onClose={() => {
           setOpenConversation(false);
           setMailsData([]);
+          setSelectedAttachments([]);
         }}
         fullWidth
         maxWidth="md"
       >
-        <DialogTitle>
+        <DialogTitle sx={{ fontWeight: 600, backgroundColor: "#f5f5f5" }}>
           Conversation with{" "}
           {client?.primary_email || client?.alternate_email || ""}
           <IconButton
             onClick={() => {
               setOpenConversation(false);
               setMailsData([]);
+              setSelectedAttachments([]);
             }}
             sx={{ position: "absolute", right: 8, top: 8 }}
           >
@@ -295,13 +385,22 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
           </IconButton>
         </DialogTitle>
 
-        <DialogContent dividers sx={{ minHeight: "450px" }}>
+        <DialogContent
+          dividers
+          sx={{
+            minHeight: 450,
+            backgroundColor: "#fafafa",
+            pt: 2,
+            border: "none",
+          }}
+        >
           {_mails.length === 0 ? (
             <Typography>No conversation yet.</Typography>
           ) : (
             _mails.map((mail) => {
               const isOutgoing = mail.direction === "outgoing";
               const timestamp = mail.sent_at || mail.received_at;
+
               return (
                 <Box
                   key={mail.message_id}
@@ -312,31 +411,65 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
                 >
                   <Box
                     sx={{
-                      backgroundColor: isOutgoing ? "#e3f2fd" : "#f3f3f3",
+                      backgroundColor: isOutgoing ? "#e3f2fd" : "#fff",
                       px: 2,
-                      py: 1,
-                      borderRadius: 2,
+                      py: 1.5,
+                      borderRadius: 3,
                       maxWidth: "75%",
                       boxShadow: 1,
+                      border: "1px solid #e0e0e0",
                     }}
                   >
                     <Typography
                       variant="caption"
-                      color="textSecondary"
+                      color="text.secondary"
                       sx={{ fontWeight: "bold" }}
                     >
                       {isOutgoing ? "You" : mail.from_address}
                     </Typography>
+
                     <Typography
                       variant="body2"
                       sx={{ whiteSpace: "pre-wrap", mt: 0.5 }}
                     >
                       {mail.parsed_body || mail.raw_body}
                     </Typography>
+
+                    {mail.attachments && mail.attachments.length > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        {mail.attachments.map((att, idx) => (
+                          <Box
+                            key={idx}
+                            display="flex"
+                            alignItems="center"
+                            gap={1}
+                            sx={{ mt: 0.5 }}
+                          >
+                            <InsertDriveFileIcon
+                              fontSize="small"
+                              color="action"
+                            />
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                color: "#1976d2",
+                                fontSize: "0.875rem",
+                                textDecoration: "none",
+                              }}
+                            >
+                              {att.name}
+                            </a>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+
                     <Typography
                       variant="caption"
-                      color="textSecondary"
-                      sx={{ mt: 0.5, display: "block", textAlign: "right" }}
+                      color="text.secondary"
+                      sx={{ mt: 1, display: "block", textAlign: "right" }}
                     >
                       {new Date(timestamp || "").toLocaleString()}
                     </Typography>
@@ -346,46 +479,113 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
             })
           )}
         </DialogContent>
+
+        {/* Attachment preview */}
+        {selectedAttachments.length > 0 && (
+          <Box
+            sx={{ m: 1 }}
+            display="flex"
+            flexDirection="column"
+            alignItems="end"
+          >
+            {selectedAttachments.map((file, idx) => (
+              <Box
+                key={idx}
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                sx={{
+                  border: "1px solid #e0e0e0",
+                  borderRadius: 1,
+                  p: 0.5,
+                  maxWidth: "fit-content",
+                }}
+              >
+                <Box display="flex" alignItems="center" gap={1} width="full">
+                  <InsertDriveFileIcon fontSize="small" color="disabled" />
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ textDecoration: "none", color: "rgba(0, 0, 0, 0.78)" }}
+                  >
+                    {file.name}
+                  </a>
+                </Box>
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteDocument(file.url);
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+          </Box>
+        )}
+        {/* Footer: Input area */}
         <Box
           sx={{
             display: "flex",
             alignItems: "center",
             gap: 2,
             px: 3,
-            py: 2,
+            pt: 2,
+            pb: 0,
+            mb: 2,
             borderTop: "1px solid #ddd",
-            backgroundColor: "#fafafa",
+            backgroundColor: "#fff",
           }}
         >
           {/* Attachment input */}
-          <IconButton component="label" size="small">
+          <IconButton
+            component="label"
+            sx={{
+              p: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
             <input
               type="file"
               hidden
+              multiple
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  // handle your upload logic here
-                  console.log("Attachment selected:", file);
+                const files = e.target.files;
+                if (files) {
+                  handleUploads(Array.from(files));
                 }
               }}
+              height={0}
+              width={0}
             />
             <AttachFileIcon />
           </IconButton>
 
-          {/* Message input */}
-          <Box sx={{ flexGrow: 1 }}>
+          {/* Message */}
+          <Box
+            sx={{
+              flexGrow: 1,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
             <textarea
               placeholder="Type your message..."
               rows={2}
               style={{
                 width: "100%",
-                padding: "8px 12px",
-                borderRadius: "8px",
+                padding: "10px 14px",
+                borderRadius: "10px",
                 border: "1px solid #ccc",
                 resize: "none",
-                fontSize: "0.875rem",
-                fontFamily: "sans-serif",
+                fontSize: "0.9rem",
+                fontFamily: "inherit",
+                backgroundColor: "#fefefe",
               }}
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -395,7 +595,7 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
           {/* Send button */}
           {mailSend ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
-              <CircularProgress size={35} />
+              <CircularProgress size={30} />
             </Box>
           ) : (
             <IconButton
@@ -404,6 +604,7 @@ const MailConversationDialog: React.FC<MailConversationDialogProps> = ({
                 e.stopPropagation();
                 handleSend();
               }}
+              sx={{ mt: 1 }}
             >
               <SendIcon />
             </IconButton>

@@ -44,6 +44,9 @@ import { api } from "../utils/api";
 import { useAuth } from "../context/AuthContext";
 import { columnService } from "../services/columnService";
 import NotesDialog from "../components/NotesDialog";
+import QuickMessageDialog from "../components/QuickMessageDialog"; // ← ADDED: Import QuickMessageDialog
+import EmailDialog from "../components/EmailDialog"; // ← ADDED: Import EmailDialog
+import EmailConversationDialog from "../components/EmailConversationDialog"; // ← ADDED: Import EmailDialog
 
 const Clients = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -57,6 +60,8 @@ const Clients = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [dynamicColumns, setDynamicColumns] = useState<ColumnMetadata[]>([]);
+  const [quickMessageOpen, setQuickMessageOpen] = useState(false); // ← ADDED: Quick message state
+  const [emailDialogOpen,setEmailDialogOpen] = useState(false); // ← ADDED: Email dialog state
   const { user } = useAuth();
 
   useEffect(() => {
@@ -140,7 +145,7 @@ const Clients = () => {
 
   const handleOpenMenu = (
     event: React.MouseEvent<HTMLElement>,
-    client: Client,
+    client: Client
   ) => {
     setAnchorEl(event.currentTarget);
     setSelectedClient(client);
@@ -348,8 +353,22 @@ const Clients = () => {
                             {`${client.first_name} ${client.last_name}`}
                           </Box>
                         </TableCell>
-                        <TableCell>{client.primary_email}</TableCell>
-                        <TableCell>{client.primary_phone}</TableCell>
+                        <TableCell
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedClient(client);
+                              setEmailDialogOpen(true); // ← ADDED: Open email dialog
+                          }}
+                        >{client.primary_email}</TableCell>
+                        <TableCell
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedClient(client);
+                              setQuickMessageOpen(true); // ← ADDED: Open quick message dialog
+                          }}
+                        >
+                          {client.primary_phone}
+                        </TableCell>
                         <TableCell>{client.case_type}</TableCell>
                         <TableCell>
                           <Chip
@@ -473,7 +492,7 @@ const Clients = () => {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onSave={handleSaveClient}
-        client={selectedClient}
+        client={selectedClient || undefined}
         mode={dialogMode}
       />
 
@@ -486,6 +505,18 @@ const Clients = () => {
       <NotesDialog
         open={notesDialogOpen}
         onClose={() => setNotesDialogOpen(false)}
+        client={selectedClient}
+      />
+
+      <QuickMessageDialog
+        open={quickMessageOpen}
+        onClose={() => setQuickMessageOpen(false)}
+        client={selectedClient}
+      />
+
+      <EmailConversationDialog
+        open={emailDialogOpen}
+        onClose={() => setEmailDialogOpen(false)}
         client={selectedClient}
       />
     </Layout>
